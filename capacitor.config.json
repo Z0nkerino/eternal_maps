@@ -1,0 +1,10 @@
+{
+  "appId": "com.eternalinc.maps",
+  "appName": "Eternal Maps",
+  "webDir": "dist-native",
+  "backgroundColor": "#FFFFFF",
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  }
+}

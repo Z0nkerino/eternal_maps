@@ -1,0 +1,9 @@
+node_modules
+dist
+.DS_Store
+*.log
+dist-desktop
+dist-native
+release
+android-signing/
+*.keystore

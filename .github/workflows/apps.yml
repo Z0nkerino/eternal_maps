@@ -1,0 +1,193 @@
+name: Apps
+
+# When package.json's version has no GitHub Release yet, this builds the Mac .dmg, the
+# Windows installer, the Android .apk, the iPhone .ipa and the self-update bundle, uploads them to a draft release, then
+# publishes it. Installed apps pick the new release up automatically.
+# Files go straight to the release (not Actions artifacts), so artifact storage quotas don't apply.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# One release build at a time, so two quick pushes can't both publish the same version.
+concurrency:
+  group: apps-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: v
+        run: |
+          TAG="v$(node -p "require('./package.json').version")"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null | grep -q false; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "$TAG is already published; nothing to build."
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            # Start from a clean draft (a failed earlier attempt may have left one behind).
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
+              --title "Eternal Maps ${TAG#v}" \
+              --notes "Mac: the .dmg · Windows: the setup .exe · Android: the .apk · iPhone: the .ipa (install with AltStore or Sideloadly) or the web app from Safari. Installed apps check for updates themselves."
+          fi
+
+  update-bundle:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run bundle
+      - run: gh release upload "${{ needs.version.outputs.tag }}" release/app-bundle.tar.gz release/latest.json --repo "$GITHUB_REPOSITORY" --clobber
+
+  mac:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run dist:mac
+        env:
+          # No Apple Developer ID yet: the app is ad-hoc signed and not notarized.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - run: gh release upload "${{ needs.version.outputs.tag }}" release/*.dmg --repo "$GITHUB_REPOSITORY" --clobber
+
+  windows:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vite build --outDir dist-desktop
+        env:
+          EM_DESKTOP: '1'
+      - run: npx electron-builder --win nsis
+      - run: gh release upload "${{ needs.version.outputs.tag }}" release/*.exe --repo "$GITHUB_REPOSITORY" --clobber
+
+  android:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - run: npm run android
+      # The signing key lives in repository secrets, never in the repo (see README → Android signing).
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/em.keystore"
+            echo "EM_KEYSTORE=$RUNNER_TEMP/em.keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No ANDROID_KEYSTORE secret: this APK is signed with a temporary key, so it can't update an earlier install."
+          fi
+      - run: ./gradlew assembleRelease --no-daemon
+        working-directory: android
+        env:
+          EM_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      - run: |
+          mkdir -p release
+          cp android/app/build/outputs/apk/release/app-release.apk "release/Eternal-Maps-${TAG#v}-android.apk"
+          gh release upload "$TAG" release/*.apk --repo "$GITHUB_REPOSITORY" --clobber
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+
+  # Unsigned: installing it needs AltStore/Sideloadly (free Apple ID) until there's a paid Apple Developer account.
+  iphone:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run ios
+      - name: Build
+        run: |
+          VERSION="${TAG#v}"
+          IFS=. read -r MA MI PA <<< "$VERSION"
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION=$((MA * 10000 + MI * 100 + PA)) \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          mkdir -p "$RUNNER_TEMP/ipa/Payload" release
+          cp -R "$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/release/Eternal-Maps-$VERSION-iphone.ipa" Payload)
+          gh release upload "$TAG" release/*.ipa --repo "$GITHUB_REPOSITORY" --clobber
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+
+  # The installable web app (iPhone, iPad, any browser) at https://<owner>.github.io/<repo>/.
+  web:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          EM_BASE: /${{ github.event.repository.name }}/
+      - run: |
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+          cd dist
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -qm "Web app ${{ needs.version.outputs.tag }}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+
+  publish:
+    needs: [version, update-bundle, mac, windows, android, iphone]
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release edit "${{ needs.version.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --draft=false --latest

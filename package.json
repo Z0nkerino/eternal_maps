@@ -1,0 +1,120 @@
+{
+  "name": "eternal-maps",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Eternal Maps by Eternal Inc. — your places, routes and journeys, in one calm place.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:desktop": "EM_DESKTOP=1 vite build --outDir dist-desktop",
+    "desktop": "npm run build:desktop && electron .",
+    "dist:mac": "npm run build:desktop && electron-builder --mac dmg --universal",
+    "dist:win": "npm run build:desktop && electron-builder --win nsis",
+    "bundle": "npm run build:desktop && node scripts/make-update-bundle.cjs",
+    "android": "npm run build:native && cap sync android",
+    "brand": "node scripts/make-brand.cjs && npx capacitor-assets generate --android --ios --iconBackgroundColor \"#0A0A0A\" --iconBackgroundColorDark \"#0A0A0A\" --splashBackgroundColor \"#FFFFFF\" --splashBackgroundColorDark \"#0A0A0A\"",
+    "build:native": "EM_DESKTOP=1 vite build --outDir dist-native",
+    "ios": "npm run build:native && cap sync ios"
+  },
+  "dependencies": {
+    "framer-motion": "^14.7.1",
+    "lucide-react": "^1.62.0",
+    "maplibre-gl": "^6.16.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.2.1",
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/ios": "^6.2.1",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.6.2",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.5.32",
+    "tailwindcss": "^3.4.19",
+    "vite": "^5.4.21",
+    "vite-plugin-pwa": "^0.21.1"
+  },
+  "main": "electron/main.cjs",
+  "author": {
+    "name": "Eternal Inc."
+  },
+  "build": {
+    "appId": "com.eternalinc.maps",
+    "productName": "Eternal Maps",
+    "copyright": "© 2026 Eternal Inc.",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "dist-desktop/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.navigation",
+      "icon": "build/icon-mac.png",
+      "target": [
+        "dmg"
+      ],
+      "darkModeSupport": true,
+      "hardenedRuntime": true,
+      "artifactName": "Eternal-Maps-${version}-mac.${ext}",
+      "identity": "-",
+      "notarize": false,
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "entitlements": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSLocationUsageDescription": "Eternal Maps uses your location to show where you are and plan routes from it.",
+        "NSLocationWhenInUseUsageDescription": "Eternal Maps uses your location to show where you are and plan routes from it."
+      }
+    },
+    "dmg": {
+      "title": "Eternal Maps",
+      "iconSize": 112,
+      "window": {
+        "width": 560,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 150,
+          "y": 190
+        },
+        {
+          "x": 410,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "Eternal-Maps-${version}-windows-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Eternal Maps"
+    },
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Z0nkerino/eternal_maps.git"
+  },
+  "updates": {
+    "repo": "Z0nkerino/eternal_maps",
+    "shellVersion": 1
+  }
+}
