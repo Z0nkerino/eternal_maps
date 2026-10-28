@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/eternal_maps/sw.js', { scope: '/eternal_maps/' })})}

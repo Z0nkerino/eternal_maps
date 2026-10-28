@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <title>Eternal Maps</title>
+    <meta name="description" content="Your places, routes and journeys — in one calm place. Private, by Eternal Inc." />
+    <meta name="author" content="Eternal Inc." />
+    <meta name="application-name" content="Eternal Maps" />
+    <meta name="apple-mobile-web-app-title" content="Eternal Maps" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/svg+xml" href="/eternal_maps/icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/eternal_maps/brand/icon-192.png" />
+    <link rel="apple-touch-icon" href="/eternal_maps/brand/apple-touch-icon.png" />
+    <script>
+      // Apply theme before first paint (no flash) — same as Universal Planner.
+      (function () {
+        try {
+          var t = localStorage.getItem('em.theme') || 'system';
+          var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+          var r = document.documentElement;
+          r.classList.toggle('dark', dark);
+          r.style.colorScheme = dark ? 'dark' : 'light';
+          document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+            m.removeAttribute('media');
+            m.setAttribute('content', dark ? '#0A0A0A' : '#FFFFFF');
+          });
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/eternal_maps/assets/index-DqXiFz78.js"></script>
+    <link rel="modulepreload" crossorigin href="/eternal_maps/assets/react-CdeWOQ8h.js">
+    <link rel="modulepreload" crossorigin href="/eternal_maps/assets/maplibre-DmU5PaWR.js">
+    <link rel="stylesheet" crossorigin href="/eternal_maps/assets/index-xKaOvNht.css">
+  <link rel="manifest" href="/eternal_maps/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/eternal_maps/registerSW.js"></script></head>
+  <body>
+    <div id="root"></div>
+    <noscript>Eternal Maps needs JavaScript to draw the map.</noscript>
+  </body>
+</html>
